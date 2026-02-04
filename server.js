@@ -9,7 +9,7 @@ process.on('uncaughtException', err => {
 })
 
 // Load environment variables
-dotenv.config({ path: './config.env' })
+dotenv.config({ path: './config/config.env' })
 
 const app = require('./app')
 
