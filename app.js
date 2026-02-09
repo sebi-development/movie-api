@@ -6,6 +6,9 @@ const mongoSanitize = require('express-mongo-sanitize')
 const xss = require('xss-clean')
 const hpp = require('hpp')
 
+const authRoutes = require('./routes/authRoutes')
+const globalErrorHandler = require('./middleware/errorMiddleware')
+
 const app = express()
 
 // GLOBAL MIDDLEWARE
@@ -30,10 +33,10 @@ app.use('/api', limiter)
 app.use(express.json({ limit: '10kb' }))
 
 // Data sanitization against NoSQL query injection
-app.use(mongoSanitize())
+// app.use(mongoSanitize())
 
 // Data sanitization against XSS
-app.use(xss())
+// app.use(xss())
 
 // Prevent parameter pollution
 app.use(hpp({
@@ -50,6 +53,7 @@ app.use((req, res, next) => {
 })
 
 // ROUTES
+app.use('/api/v1/auth', authRoutes)
 
 // Handle undefined routes
 app.all(/(.*)/, (req, res, next) => {
@@ -58,5 +62,7 @@ app.all(/(.*)/, (req, res, next) => {
   err.statusCode = 404;
   next(err)
 })
+
+app.use(globalErrorHandler)
 
 module.exports = app
