@@ -41,6 +41,12 @@ const UserSchema = new mongoose.Schema({
     default: 'default.jpg',
 
   },
+
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user'
+  }
 })
 
 // INSTANCE METHODS

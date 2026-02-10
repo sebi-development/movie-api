@@ -6,7 +6,9 @@ const mongoSanitize = require('express-mongo-sanitize')
 const xss = require('xss-clean')
 const hpp = require('hpp')
 
-const authRoutes = require('./routes/authRoutes')
+const authRouter = require('./routes/authRoutes')
+const movieRouter = require('./routes/movieRoutes')
+
 const globalErrorHandler = require('./middleware/errorMiddleware')
 
 const app = express()
@@ -52,8 +54,9 @@ app.use((req, res, next) => {
   next()
 })
 
-// ROUTES
-app.use('/api/v1/auth', authRoutes)
+// ROUTERS
+app.use('/api/v1/auth', authRouter)
+app.use('/api/v1/movies', movieRouter)
 
 // Handle undefined routes
 app.all(/(.*)/, (req, res, next) => {
