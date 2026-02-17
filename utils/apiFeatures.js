@@ -7,45 +7,57 @@ class APIFeatures {
 
   filter() {
     // 1. Create querytring and remove special fields: page, sort, limit, fields
-    const { page, sort, limit, fields, ...filterData } = this.queryString;
+    const { page, sort, limit, fields, search, ...filterData } = this.queryString;
+
     // 2. Convert operators: gte, gt, lte, lt to $gte, $gt, $lte, $lt
     let queryStr = JSON.stringify(filterData)
     queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`)
-    // 3. Apply filter to this.query
+
     this.query = this.query.find(JSON.parse(queryStr))
 
     return this
   }
 
   sort() {
-    // YOUR CODE:
-    // 1. Check if queryString has 'sort'
-    // 2. If yes: split by comma and join with space
-    //    Example: 'price,ratingsAverage' → 'price ratingsAverage'
-    // 3. If no: default to '-createdAt' (newest first)
-    // 4. Apply sort to this.query
+    if (this.queryString.sort) {
+      // If yes: split by comma and join with space
+      const sortBy = this.queryString.sort.split(',').join(' ')
+      this.query = this.query.sort(sortBy)
+    }
 
     return this
   }
 
   limitFields() {
-    // YOUR CODE:
-    // 1. Check if queryString has 'fields'
-    // 2. If yes: split by comma and join with space
-    //    Example: 'title,director' → 'title director'
-    // 3. If no: exclude '__v' field
-    // 4. Apply select to this.query
+    if (this.queryString.fields) {
+      const limitBy = this.queryString.fields.split(',').join(' ')
+      this.query = this.query.select(limitBy)
+    } else {
+      // If no: exclude '__v' field
+      this.query = this.query.select('-__v')
+    }
 
     return this
   }
 
   paginate() {
-    // YOUR CODE:
-    // 1. Get page from queryString (default: 1)
-    // 2. Get limit from queryString (default: 10)
-    // 3. Calculate skip: (page - 1) * limit
-    //    Example: page=3, limit=10 → skip=20
-    // 4. Apply skip and limit to this.query
+    // Get page from queryString (default: 1)
+    const page = this.queryString.page * 1 || 1
+    // Get limit from queryString (default: 10)
+    const limit = this.queryString.limit || 10
+    // Calculate skip: (page - 1) * limit
+    const skip = (page - 1) * limit
+    // Apply skip and limit to this.query
+    this.query = this.query.skip(skip).limit(limit)
+    return this
+  }
+
+  search() {
+    if (this.queryString.search) {
+      this.query = this.query.find({
+        $text: { $search: this.queryString.search }
+      })
+    }
     return this
   }
 }

@@ -1,16 +1,18 @@
 const Movie = require('../models/movieModel')
 const AppError = require('../utils/AppError')
-
+const APIFeatures = require('../utils/apiFeatures')
 const catchAsync = require('../utils/catchAsync')
 
 exports.getAllMovies = catchAsync(async (req, res, next) => {
-  const movies = await Movie.find()
+  // BUILD QUERY
+  const features = new APIFeatures(Movie.find(), req.query).search().filter().sort().limitFields().paginate()
+  const movies = await features.query
 
   res.status(200).json({
     status: 'success',
-    results: movies.length,
     data: {
-      movies
+      results: movies.length,
+      data: { movies }
     }
   })
 })
@@ -52,7 +54,7 @@ exports.createMovie = catchAsync(async (req, res, next) => {
 })
 
 exports.updateMovie = catchAsync(async (req, res, next) => {
-  const movie = await Movie.findOneAndUpdate(req.params.id, req.body, {
+  const movie = await Movie.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
   })

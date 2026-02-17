@@ -83,6 +83,9 @@ const MovieSchema = mongoose.Schema({
   toObject: { virtuals: true }
 })
 
+// INDEXES
+MovieSchema.index({ title: 'text', description: 'text' })
+
 // MIDDLEWARE
 MovieSchema.pre('save', async function () {
   this.slug = slugify(this.title, { lower: true })

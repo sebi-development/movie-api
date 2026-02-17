@@ -1,8 +1,12 @@
 const express = require('express')
 const movieController = require('../controllers/movieController')
 const authController = require('../controllers/authController')
+const reviewRouter = require('./reviewRoutes')
 
 const router = express.Router()
+
+// Nested route: Redirect to review router
+router.use('/:movieId/reviews', reviewRouter)
 
 // Public router
 router.route('/').get(movieController.getAllMovies)
