@@ -70,12 +70,11 @@ reviewSchema.statics.calcAverageRatings = async function (movieId) {
 reviewSchema.index({ movie: 1, user: 1 }, { unique: true })
 
 // Populate user info automatically
-reviewSchema.pre(/^find/, function (next) {
+reviewSchema.pre(/^find/, function () {
   this.populate({
     path: 'user',
     select: 'name photo'
   })
-  next()
 })
 
 // Trigger calculation on save

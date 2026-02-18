@@ -2,6 +2,7 @@ const Movie = require('../models/movieModel')
 const AppError = require('../utils/AppError')
 const APIFeatures = require('../utils/apiFeatures')
 const catchAsync = require('../utils/catchAsync')
+const filterObj = require('../utils/filterObj')
 
 exports.getAllMovies = catchAsync(async (req, res, next) => {
   // BUILD QUERY
@@ -19,7 +20,7 @@ exports.getAllMovies = catchAsync(async (req, res, next) => {
 
 exports.getMovie = catchAsync(async (req, res, next) => {
 
-  const movie = await Movie.findById(req.params.id)
+  const movie = await Movie.findById(req.params.id).populate('reviews')
 
   if (!movie) {
     return next(new AppError('Movie not found', 404))
@@ -34,16 +35,8 @@ exports.getMovie = catchAsync(async (req, res, next) => {
 })
 
 exports.createMovie = catchAsync(async (req, res, next) => {
-  const newMovie = await Movie.create({
-    title: req.body.title,
-    description: req.body.description,
-    director: req.body.director,
-    genre: req.body.genre,
-    cast: req.body.cast,
-    releaseYear: req.body.releaseYear,
-    duration: req.body.duration,
-    posterUrl: req.body.posterUrl
-  })
+  const filteredBody = filterObj(req.body, 'title', 'description', 'director', 'genre', 'cast', 'releaseYear', 'duration', 'posterUrl')
+  const newMovie = await Movie.create(filteredBody)
 
   res.status(201).json({
     status: 'success',

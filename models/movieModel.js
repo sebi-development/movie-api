@@ -91,6 +91,13 @@ MovieSchema.pre('save', async function () {
   this.slug = slugify(this.title, { lower: true })
 })
 
+// VIRTUALS
+MovieSchema.virtual('reviews', {
+  ref: 'Review',
+  foreignField: 'movie',
+  localField: '_id'
+})
+
 const Movie = mongoose.model('Movie', MovieSchema)
 
 module.exports = Movie

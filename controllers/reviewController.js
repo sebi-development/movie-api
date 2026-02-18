@@ -79,6 +79,8 @@ exports.updateReview = catchAsync(async (req, res, next) => {
   review.review = req.body.review ?? review.review
   review.rating = req.body.rating ?? review.rating
 
+  if (!review) return
+
   await review.save()
 
   res.status(200).json({
@@ -89,6 +91,7 @@ exports.updateReview = catchAsync(async (req, res, next) => {
 
 exports.deleteReview = catchAsync(async (req, res, next) => {
   const review = await findReviewAndValidate(req.params.id, req, next)
+  if (!review) return
 
   await review.deleteOne()
 
