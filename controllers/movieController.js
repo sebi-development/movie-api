@@ -20,7 +20,7 @@ exports.getAllMovies = catchAsync(async (req, res, next) => {
 
 exports.getMovie = catchAsync(async (req, res, next) => {
 
-  const movie = await Movie.findById(req.params.id).populate('reviews')
+  const movie = await Movie.findById(req.params.id)
 
   if (!movie) {
     return next(new AppError('Movie not found', 404))

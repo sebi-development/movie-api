@@ -25,7 +25,7 @@ exports.getAllReviews = catchAsync(async (req, res, next) => {
   if (req.params.movieId) filter = { movie: req.params.movieId }
 
   // BUILD QUERY
-  const features = new APIFeatures(Review.find(filter), req.query).search().filter().sort().limitFields().paginate()
+  const features = new APIFeatures(Review.find(filter), req.query).filter().sort().limitFields().paginate()
   // EXECUTE QUERY
   const reviews = await features.query
 

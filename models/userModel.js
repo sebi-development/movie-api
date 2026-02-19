@@ -46,7 +46,14 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
-  }
+  },
+
+  watchlist: [
+    {
+      type: mongoose.Schema.ObjectId,
+      ref: 'Movie'
+    }
+  ]
 })
 
 // INSTANCE METHODS

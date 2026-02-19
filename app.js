@@ -8,6 +8,7 @@ const hpp = require('hpp')
 const authRouter = require('./routes/authRoutes')
 const movieRouter = require('./routes/movieRoutes')
 const reviewRouter = require('./routes/reviewRoutes')
+const userRouter = require('./routes/userRoutes')
 
 const globalErrorHandler = require('./middleware/errorMiddleware')
 
@@ -55,6 +56,7 @@ app.use((req, res, next) => {
 app.use('/api/v1/auth', authRouter)
 app.use('/api/v1/movies', movieRouter)
 app.use('/api/v1/reviews', reviewRouter)
+app.use('/api/v1/users', userRouter)
 
 // Handle undefined routes
 app.all('*', (req, res, next) => {

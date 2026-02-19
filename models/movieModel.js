@@ -92,11 +92,11 @@ MovieSchema.pre('save', async function () {
 })
 
 // VIRTUALS
-MovieSchema.virtual('reviews', {
-  ref: 'Review',
-  foreignField: 'movie',
-  localField: '_id'
-})
+// MovieSchema.virtual('reviews', {
+//   ref: 'Review',
+//   foreignField: 'movie',
+//   localField: '_id'
+// })
 
 const Movie = mongoose.model('Movie', MovieSchema)
 
