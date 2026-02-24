@@ -51,7 +51,10 @@ const MovieSchema = mongoose.Schema({
     required: [true, 'A movie must have a director']
   },
 
-  cast: [String],
+  cast: [{
+    type: mongoose.Schema.ObjectId,
+    ref: 'Actor'
+  }],
 
   posterUrl: {
     type: String,
@@ -87,8 +90,17 @@ const MovieSchema = mongoose.Schema({
 MovieSchema.index({ title: 'text', description: 'text' })
 
 // MIDDLEWARE
-MovieSchema.pre('save', async function () {
+MovieSchema.pre('save', function (next) {
   this.slug = slugify(this.title, { lower: true })
+  next()
+})
+
+MovieSchema.pre(/^find/, function (next) {
+  this.populate({
+    path: 'cast',
+    select: '-__v'
+  })
+  next()
 })
 
 // VIRTUALS
