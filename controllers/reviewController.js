@@ -75,11 +75,11 @@ exports.createReview = catchAsync(async (req, res, next) => {
 exports.updateReview = catchAsync(async (req, res, next) => {
   const review = await findReviewAndValidate(req.params.id, req, next)
 
+  if (!review) return
+
   // Updating allowed fields
   review.review = req.body.review ?? review.review
   review.rating = req.body.rating ?? review.rating
-
-  if (!review) return
 
   await review.save()
 

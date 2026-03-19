@@ -25,10 +25,10 @@ exports.getAllActors = catchAsync(async (req, res, next) => {
 })
 
 exports.getActor = catchAsync(async (req, res, next) => {
-  const actor = Actor.findById(req.params.id).populate('movies')
+  const actor = await Actor.findById(req.params.id).populate('movies')
 
   if (!actor) {
-    actorNotFound(next)
+    return actorNotFound(next)
   }
 
   res.status(200).json({
@@ -75,7 +75,7 @@ exports.updateActor = catchAsync(async (req, res, next) => {
 exports.deleteActor = catchAsync(async (req, res, next) => {
   const actor = await Actor.findByIdAndDelete(req.params.id)
 
-  if (!actor) actorNotFound(next)
+  if (!actor) return actorNotFound(next)
 
   // Remove actor from all movies
   await Movie.updateMany(

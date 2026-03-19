@@ -47,7 +47,6 @@ ActorSchema.index({ firstName: 1, lastName: 1 })
 // MIDDLEWARE
 ActorSchema.virtual('fullName').get(function (next) {
   return `${this.firstName} ${this.lastName}`
-  next()
 })
 
 ActorSchema.virtual('age').get(function (next) {
@@ -67,6 +66,7 @@ ActorSchema.virtual('movies', {
 
 ActorSchema.pre('save', function (next) {
   this.slug = slugify(`${this.firstName} ${this.lastName}`, { lower: true })
+  next()
 })
 
 const Actor = mongoose.model('Actor', ActorSchema)
