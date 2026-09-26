@@ -1,71 +1,57 @@
 const AppError = require('../utils/AppError')
 
-const handleCastErrorDB = err => {
-  const message = `Invalid ${err.path}: ${err.value}`
-  return new AppError(message, 400)
-}
+// Translate known library errors into operational AppErrors
+
+const handleCastErrorDB = err => new AppError(`Invalid ${err.path}: ${JSON.stringify(err.value)}`, 400)
 
 const handleDuplicateFieldsDB = err => {
-  const value = err.keyValue ? Object.values(err.keyValue)[0] : 'Duplicate value';
-  const message = `Duplicate field value: ${value}. Please use another value`
-  return new AppError(message, 400)
+  const [field, value] = Object.entries(err.keyValue || {})[0] || ['field', 'value']
+  return new AppError(`Duplicate value for ${field}: ${JSON.stringify(value)}. Please use another value`, 409)
 }
 
 const handleValidationErrorDB = err => {
-  const errors = Object.values(err.errors).map(el => el.message)
-  const message = `Invalid input data. ${errors.join('. ')}`
-  return new AppError(message, 400)
+  const errors = Object.fromEntries(
+    Object.entries(err.errors).map(([field, el]) => [field, el.message])
+  )
+  const appError = new AppError(`Invalid input data. ${Object.values(errors).join('. ')}`, 400)
+  appError.errors = errors
+  return appError
 }
 
-const handleJWTError = () =>
-  new AppError('Invalid token. Please log in again', 401)
+const handleJWTError = () => new AppError('Invalid token. Please log in again', 401)
 
-const handleJWTExpiredError = () =>
-  new AppError('Your token has expired. Please log in again', 401)
+const handleJWTExpiredError = () => new AppError('Your token has expired. Please log in again', 401)
 
-const sendErrorDev = (err, req, res) => {
-  res.status(err.statusCode).json({
-    status: err.status,
-    error: err,
-    message: err.message,
-    stack: err.stack
-  })
-}
-
-const sendErrorProd = (err, req, res) => {
-  // Operational, trusted error: send message to client
-  if (err.isOperational) {
-    res.status(err.statusCode).json({
-      status: err.status,
-      message: err.message
-    })
-  } else {
-    // Programming or other unknown error: don't leak error details
-    console.error('ERROR:', err)
-
-    res.status(500).json({
-      status: 'error',
-      message: 'Something went wrong'
-    })
-  }
+const normalizeError = err => {
+  if (err instanceof AppError) return err
+  if (err.name === 'CastError') return handleCastErrorDB(err)
+  if (err.code === 11000) return handleDuplicateFieldsDB(err)
+  if (err.name === 'ValidationError') return handleValidationErrorDB(err)
+  if (err.name === 'JsonWebTokenError') return handleJWTError()
+  if (err.name === 'TokenExpiredError') return handleJWTExpiredError()
+  // body-parser errors
+  if (err.type === 'entity.parse.failed') return new AppError('Invalid JSON in request body', 400)
+  if (err.type === 'entity.too.large') return new AppError('Request body is too large', 413)
+  return err
 }
 
 module.exports = (err, req, res, next) => {
-  err.statusCode = err.statusCode || 500
-  err.status = err.status || 'error'
+  const error = normalizeError(err)
+  const isOperational = error.isOperational === true
+  const statusCode = isOperational ? error.statusCode : 500
 
-  if (process.env.NODE_ENV === 'development') {
-    sendErrorDev(err, req, res)
-  } else if (process.env.NODE_ENV === 'production') {
-    let error = Object.create(err);
-    error.message = err.message;
+  if (!isOperational) console.error('💥 ERROR:', err)
 
-    if (error.name === 'CastError') error = handleCastErrorDB(error)
-    if (error.code === 11000) error = handleDuplicateFieldsDB(error)
-    if (error.name === 'ValidationError') error = handleValidationErrorDB(error)
-    if (error.name === 'JsonWebTokenError') error = handleJWTError()
-    if (error.name === 'TokenExpiredError') error = handleJWTExpiredError()
-
-    sendErrorProd(error, req, res)
+  const body = {
+    status: isOperational ? error.status : 'error',
+    // Programming or unknown errors: don't leak details outside development
+    message: isOperational || process.env.NODE_ENV === 'development'
+      ? error.message
+      : 'Something went wrong'
   }
+
+  if (error.errors && isOperational) body.errors = error.errors
+  if (process.env.NODE_ENV === 'development') body.stack = err.stack
+
+  res.status(statusCode).json(body)
 }

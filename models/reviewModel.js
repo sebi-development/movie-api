@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 const Movie = require('./movieModel')
 
-const reviewSchema = mongoose.Schema({
+const reviewSchema = new mongoose.Schema({
   review: {
     type: String,
     required: [true, 'Review cannot be empty'],
@@ -15,11 +15,6 @@ const reviewSchema = mongoose.Schema({
     required: [true, 'A review must contain a rating'],
     min: [1, 'Rating must be at least 1'],
     max: [10, 'Rating cannot exceed 10']
-  },
-
-  createdAt: {
-    type: Date,
-    default: Date.now
   },
 
   // RELATIONSHIPS
@@ -36,15 +31,20 @@ const reviewSchema = mongoose.Schema({
     required: [true, 'Review must belong to a movie']
   }
 }, {
-  toJSON: { virtuals: true },
+  timestamps: true,
+  id: false,
+  toJSON: { virtuals: true, versionKey: false },
   toObject: { virtuals: true }
 })
 
+// One review per user per movie
+reviewSchema.index({ movie: 1, user: 1 }, { unique: true })
+
+// STATICS
+// Recalculates ratingsAverage / ratingsQuantity on the movie from its reviews
 reviewSchema.statics.calcAverageRatings = async function (movieId) {
   const stats = await this.aggregate([
-    {
-      $match: { movie: movieId }
-    },
+    { $match: { movie: new mongoose.Types.ObjectId(String(movieId)) } },
     {
       $group: {
         _id: '$movie',
@@ -54,22 +54,15 @@ reviewSchema.statics.calcAverageRatings = async function (movieId) {
     }
   ])
 
-  if (stats.length > 0) {
-    await Movie.findByIdAndUpdate(movieId, {
-      ratingsQuantity: stats[0].nRating,
-      ratingsAverage: stats[0].avgRating
-    })
-  } else {
-    await Movie.findByIdAndUpdate(movieId, {
-      ratingsQuantity: 0,
-      ratingsAverage: 0
-    })
-  }
+  await Movie.updateOne({ _id: movieId }, {
+    ratingsQuantity: stats.length ? stats[0].nRating : 0,
+    ratingsAverage: stats.length ? stats[0].avgRating : 0
+  })
 }
 
-reviewSchema.index({ movie: 1, user: 1 }, { unique: true })
+// MIDDLEWARE
 
-// Populate user info automatically
+// Populate author info automatically (null if the account was deactivated)
 reviewSchema.pre(/^find/, function () {
   this.populate({
     path: 'user',
@@ -77,18 +70,22 @@ reviewSchema.pre(/^find/, function () {
   })
 })
 
-// Trigger calculation on save
-reviewSchema.post('save', function () {
-  this.constructor.calcAverageRatings(this.movie).catch(err => console.error('Failed to calculate ratings:', err))
-})
-// Trigger calculation on update/delete
-reviewSchema.pre(/^findOneAnd/, async function (next) {
-  this.r = await this.findOne()
-  next()
+// Keep the movie's rating stats in sync. Hooks are awaited, so the response
+// is only sent once the movie has been updated.
+
+// review.save() — create and update
+reviewSchema.post('save', async function () {
+  await this.constructor.calcAverageRatings(this.movie)
 })
 
-reviewSchema.post(/^findOneAnd/, async function () {
-  await this.r.constructor.calcAverageRatings(this.r.movie).catch(err => console.error('Rating calc failed:', err))
+// review.deleteOne() on a document
+reviewSchema.post('deleteOne', { document: true, query: false }, async function () {
+  await this.constructor.calcAverageRatings(this.movie)
+})
+
+// Review.findByIdAndUpdate / findByIdAndDelete / findOneAnd* — post hook receives the doc
+reviewSchema.post(/^findOneAnd/, async function (doc) {
+  if (doc) await doc.constructor.calcAverageRatings(doc.movie)
 })
 
 const Review = mongoose.model('Review', reviewSchema)

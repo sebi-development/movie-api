@@ -1,4 +1,24 @@
+# Dependencies
 node_modules/
-config/config.env
+
+# Environment variables (never commit secrets)
 .env
+.env.*
+!.env.example
+config/*.env
+
+# Test & tooling output
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
 .DS_Store
+.vscode/
+.idea/
+
+# Local planning notes (contain a leaked credential — never commit)
+portfolio_readiness_audit_and_roadmap.md
+IMPLEMENTATION_SUMMARY.md

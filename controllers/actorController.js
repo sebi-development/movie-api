@@ -1,90 +1,24 @@
 const Actor = require('../models/actorModel')
 const Movie = require('../models/movieModel')
-const catchAsync = require('../utils/catchAsync')
-const AppError = require('../utils/AppError')
-const APIFeatures = require('../utils/apiFeatures')
+const factory = require('./handlerFactory')
 
-function actorNotFound(next) {
-  return next(new AppError('No actor found with that ID', 404))
-}
+const ALLOWED_FIELDS = [
+  'firstName', 'lastName', 'birthDate', 'birthPlace',
+  'biography', 'photo', 'nationality', 'url'
+]
 
-exports.getAllActors = catchAsync(async (req, res, next) => {
-  const features = new APIFeatures(Actor.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .paginate()
+exports.getAllActors = factory.getAll(Actor, { key: 'actors' })
 
-  const actors = await features.query
-
-  res.status(200).json({
-    status: 'success',
-    results: actors.length,
-    data: { actors }
-  })
+exports.getActor = factory.getOne(Actor, {
+  key: 'actor',
+  populate: { path: 'movies', select: 'title releaseYear posterUrl ratingsAverage' }
 })
 
-exports.getActor = catchAsync(async (req, res, next) => {
-  const actor = await Actor.findById(req.params.id).populate('movies')
+exports.createActor = factory.createOne(Actor, { key: 'actor', allowedFields: ALLOWED_FIELDS })
 
-  if (!actor) {
-    return actorNotFound(next)
-  }
+exports.updateActor = factory.updateOne(Actor, { key: 'actor', allowedFields: ALLOWED_FIELDS })
 
-  res.status(200).json({
-    status: 'success',
-    data: { actor }
-  })
-})
-
-exports.createActor = catchAsync(async (req, res, next) => {
-  const newActor = await Actor.create({
-    firstName: req.body.firstName,
-    lastName: req.body.lastName,
-    birthDate: req.body.birthDate,
-    birthPlace: req.body.birthPlace,
-    biography: req.body.biography,
-    photo: req.body.photo,
-    nationality: req.body.nationality
-  })
-
-  res.status(201).json({
-    status: 'success',
-    data: { actor: newActor }
-  })
-})
-
-exports.updateActor = catchAsync(async (req, res, next) => {
-  const actor = await Actor.findByIdAndUpdate(
-    req.params.id,
-    req.body,
-    {
-      new: true,
-      runValidators: true
-    }
-  )
-
-  if (!actor) actorNotFound(next)
-
-  res.status(200).json({
-    status: 'success',
-    data: { actor }
-  })
-})
-
-exports.deleteActor = catchAsync(async (req, res, next) => {
-  const actor = await Actor.findByIdAndDelete(req.params.id)
-
-  if (!actor) return actorNotFound(next)
-
-  // Remove actor from all movies
-  await Movie.updateMany(
-    { cast: actor._id },
-    { $pull: { cast: actor._id } }
-  )
-
-  res.status(204).json({
-    status: 'success',
-    data: null
-  })
+// Remove the deleted actor from the cast of every movie
+exports.deleteActor = factory.deleteOne(Actor, {
+  afterDelete: actor => Movie.updateMany({ cast: actor._id }, { $pull: { cast: actor._id } })
 })

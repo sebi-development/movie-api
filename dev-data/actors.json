@@ -1,0 +1,82 @@
+[
+  {
+    "_id": "64a000000000000000000a01",
+    "firstName": "Leonardo",
+    "lastName": "DiCaprio",
+    "birthDate": "1974-11-11",
+    "birthPlace": "Los Angeles, California, USA",
+    "nationality": "American",
+    "biography": "Academy Award-winning actor and producer known for ambitious collaborations with directors such as Martin Scorsese and Christopher Nolan, and for his long-standing environmental activism.",
+    "url": "https://www.imdb.com/name/nm0000138/"
+  },
+  {
+    "_id": "64a000000000000000000a02",
+    "firstName": "Christian",
+    "lastName": "Bale",
+    "birthDate": "1974-01-30",
+    "birthPlace": "Haverfordwest, Pembrokeshire, Wales, UK",
+    "nationality": "British",
+    "biography": "Chameleonic actor famous for dramatic physical transformations, an Oscar winner for The Fighter and the star of Christopher Nolan's Dark Knight trilogy.",
+    "url": "https://www.imdb.com/name/nm0000288/"
+  },
+  {
+    "_id": "64a000000000000000000a03",
+    "firstName": "Matthew",
+    "lastName": "McConaughey",
+    "birthDate": "1969-11-04",
+    "birthPlace": "Uvalde, Texas, USA",
+    "nationality": "American",
+    "biography": "Actor whose career shift toward dramatic roles in the 2010s earned him an Academy Award for Dallas Buyers Club and widespread acclaim for Interstellar and True Detective.",
+    "url": "https://www.imdb.com/name/nm0000190/"
+  },
+  {
+    "_id": "64a000000000000000000a04",
+    "firstName": "Tom",
+    "lastName": "Hanks",
+    "birthDate": "1956-07-09",
+    "birthPlace": "Concord, California, USA",
+    "nationality": "American",
+    "biography": "Two-time Academy Award winner and one of the most beloved actors in Hollywood, equally at home in drama, comedy and as the voice of Woody in Toy Story.",
+    "url": "https://www.imdb.com/name/nm0000158/"
+  },
+  {
+    "_id": "64a000000000000000000a05",
+    "firstName": "Keanu",
+    "lastName": "Reeves",
+    "birthDate": "1964-09-02",
+    "birthPlace": "Beirut, Lebanon",
+    "nationality": "Canadian",
+    "biography": "Actor best known for defining action roles as Neo in The Matrix and the title character of the John Wick franchise.",
+    "url": "https://www.imdb.com/name/nm0000206/"
+  },
+  {
+    "_id": "64a000000000000000000a06",
+    "firstName": "Morgan",
+    "lastName": "Freeman",
+    "birthDate": "1937-06-01",
+    "birthPlace": "Memphis, Tennessee, USA",
+    "nationality": "American",
+    "biography": "Actor and narrator with an unmistakable voice, an Academy Award winner for Million Dollar Baby and unforgettable as Red in The Shawshank Redemption.",
+    "url": "https://www.imdb.com/name/nm0000151/"
+  },
+  {
+    "_id": "64a000000000000000000a07",
+    "firstName": "Brad",
+    "lastName": "Pitt",
+    "birthDate": "1963-12-18",
+    "birthPlace": "Shawnee, Oklahoma, USA",
+    "nationality": "American",
+    "biography": "Actor and producer whose work spans cult classics like Fight Club and Se7en to an Academy Award-winning turn in Once Upon a Time in Hollywood.",
+    "url": "https://www.imdb.com/name/nm0000093/"
+  },
+  {
+    "_id": "64a000000000000000000a08",
+    "firstName": "Anne",
+    "lastName": "Hathaway",
+    "birthDate": "1982-11-12",
+    "birthPlace": "Brooklyn, New York City, New York, USA",
+    "nationality": "American",
+    "biography": "Academy Award-winning actress recognized for Les Misérables, The Devil Wears Prada and her role as Dr. Amelia Brand in Interstellar.",
+    "url": "https://www.imdb.com/name/nm0004266/"
+  }
+]

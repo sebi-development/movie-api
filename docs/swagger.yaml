@@ -1,0 +1,1460 @@
+openapi: 3.0.3
+info:
+  title: Movie API
+  version: 1.0.0
+  description: |
+    RESTful API for a movie database with actors, user reviews and personal watchlists.
+
+    ## Authentication
+    Protected endpoints require a JWT sent as a Bearer token. Get one from
+    `POST /auth/signup` or `POST /auth/login`, then click **Authorize** and paste the token.
+
+    Seeded demo accounts (after `npm run data:import`), password `password123`:
+    - `admin@movieapi.dev` (admin)
+    - `jane@example.com` (user)
+
+    ## Querying collections
+    Every list endpoint supports:
+    - **Filtering** – `?genre=Drama`, repeat a field for OR: `?genre=Drama&genre=Crime`
+    - **Comparison operators** – `?duration[gte]=120&releaseYear[lt]=2000` (`gt`, `gte`, `lt`, `lte`, `ne`)
+    - **Sorting** – `?sort=-ratingsAverage,releaseYear` (prefix `-` for descending)
+    - **Field limiting** – `?fields=title,releaseYear`
+    - **Pagination** – `?page=2&limit=20` (max 100 per page)
+    - **Full-text search** (movies) – `?search=dark knight`
+
+    ## Errors
+    Errors share the shape `{ "status": "fail" | "error", "message": "..." }`.
+    Validation errors add an `errors` object mapping each field to its message.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: /api/v1
+    description: Current server
+
+tags:
+  - name: Auth
+    description: Sign up, log in and manage your password
+  - name: Movies
+    description: Browse movies (public) and manage them (admin)
+  - name: Actors
+    description: Browse actors (public) and manage them (admin)
+  - name: Reviews
+    description: Read reviews (public) and write your own (users)
+  - name: Me
+    description: The logged-in user's profile
+  - name: Watchlist
+    description: The logged-in user's personal watchlist
+  - name: Users (admin)
+    description: User management for administrators
+  - name: System
+    description: Health checks
+
+paths:
+  # ───────────────────────────── AUTH ─────────────────────────────
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Create an account
+      description: New accounts always get the `user` role.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/AuthSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuthSuccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Incorrect email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: fail
+                message: Incorrect email or password
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /auth/updateMyPassword:
+    patch:
+      tags: [Auth]
+      summary: Change your password
+      description: Requires the current password. Tokens issued before the change stop working; a new token is returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordInput'
+      responses:
+        '200':
+          $ref: '#/components/responses/AuthSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ───────────────────────────── MOVIES ─────────────────────────────
+  /movies:
+    get:
+      tags: [Movies]
+      summary: List movies
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/fields'
+        - name: search
+          in: query
+          description: Full-text search on title and description (results ranked by relevance unless `sort` is given)
+          schema:
+            type: string
+          example: dream heist
+        - name: genre
+          in: query
+          description: Filter by genre. Repeat the parameter to match any of several genres.
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Genre'
+          style: form
+          explode: true
+        - name: releaseYear
+          in: query
+          description: Exact release year
+          schema:
+            type: integer
+        - name: duration[gte]
+          in: query
+          description: Minimum duration in minutes (also available `gt`, `lt`, `lte` and on any numeric field)
+          schema:
+            type: integer
+        - name: director
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of movies
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          movies:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Movie'
+    post:
+      tags: [Movies]
+      summary: Create a movie (admin)
+      description: '`ratingsAverage`, `ratingsQuantity` and `slug` are managed by the server and ignored if sent.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MovieInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/MovieSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /movies/top-5-movies:
+    get:
+      tags: [Movies]
+      summary: Top 5 movies by user rating
+      description: Alias for `/movies?sort=-ratingsAverage,-rating&limit=5` with a compact field selection.
+      security: []
+      responses:
+        '200':
+          description: The five highest rated movies
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          movies:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Movie'
+
+  /movies/movie-stats:
+    get:
+      tags: [Movies]
+      summary: Statistics per genre
+      description: MongoDB aggregation pipeline grouping movies by genre.
+      security: []
+      responses:
+        '200':
+          description: Statistics grouped by genre, most common genre first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  results:
+                    type: integer
+                    example: 14
+                  data:
+                    type: object
+                    properties:
+                      stats:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/GenreStats'
+
+  /movies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [Movies]
+      summary: Get a movie
+      description: Includes the populated cast and all reviews (newest first).
+      security: []
+      responses:
+        '200':
+          description: The movie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  data:
+                    type: object
+                    properties:
+                      movie:
+                        allOf:
+                          - $ref: '#/components/schemas/Movie'
+                          - type: object
+                            properties:
+                              reviews:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Review'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Movies]
+      summary: Update a movie (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MovieUpdate'
+      responses:
+        '200':
+          $ref: '#/components/responses/MovieSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Movies]
+      summary: Delete a movie (admin)
+      description: Also deletes the movie's reviews and removes it from every watchlist.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /movies/{movieId}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/movieId'
+    get:
+      tags: [Reviews]
+      summary: List the reviews of a movie
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/fields'
+      responses:
+        '200':
+          $ref: '#/components/responses/ReviewList'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+    post:
+      tags: [Reviews]
+      summary: Review a movie (users)
+      description: One review per user per movie. The author is always the logged-in user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ReviewSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ───────────────────────────── ACTORS ─────────────────────────────
+  /actors:
+    get:
+      tags: [Actors]
+      summary: List actors
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/fields'
+        - name: nationality
+          in: query
+          schema:
+            type: string
+          example: American
+      responses:
+        '200':
+          description: A page of actors
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          actors:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/Actor'
+    post:
+      tags: [Actors]
+      summary: Create an actor (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActorInput'
+      responses:
+        '201':
+          $ref: '#/components/responses/ActorSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /actors/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [Actors]
+      summary: Get an actor
+      description: Includes the actor's filmography (`movies`).
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/ActorSuccess'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Actors]
+      summary: Update an actor (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActorUpdate'
+      responses:
+        '200':
+          $ref: '#/components/responses/ActorSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Actors]
+      summary: Delete an actor (admin)
+      description: Also removes the actor from the cast of every movie.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ───────────────────────────── REVIEWS ─────────────────────────────
+  /reviews:
+    get:
+      tags: [Reviews]
+      summary: List all reviews
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/fields'
+        - name: rating[gte]
+          in: query
+          description: Minimum rating
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+      responses:
+        '200':
+          $ref: '#/components/responses/ReviewList'
+    post:
+      tags: [Reviews]
+      summary: Create a review (users)
+      description: Same as `POST /movies/{movieId}/reviews`, with the movie id in the body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ReviewInput'
+                - type: object
+                  required: [movie]
+                  properties:
+                    movie:
+                      $ref: '#/components/schemas/ObjectId'
+      responses:
+        '201':
+          $ref: '#/components/responses/ReviewSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /reviews/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [Reviews]
+      summary: Get a review
+      security: []
+      responses:
+        '200':
+          $ref: '#/components/responses/ReviewSuccess'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Reviews]
+      summary: Edit a review (author or admin)
+      description: Only `review` and `rating` can change. The movie's rating is recalculated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewUpdate'
+      responses:
+        '200':
+          $ref: '#/components/responses/ReviewSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Reviews]
+      summary: Delete a review (author or admin)
+      description: The movie's rating is recalculated.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ───────────────────────────── ME ─────────────────────────────
+  /users/me:
+    get:
+      tags: [Me]
+      summary: Get your profile
+      responses:
+        '200':
+          $ref: '#/components/responses/UserSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/updateMe:
+    patch:
+      tags: [Me]
+      summary: Update your name or email
+      description: Other fields are ignored. Passwords must be changed via `/auth/updateMyPassword`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Jane Smith
+                email:
+                  type: string
+                  format: email
+                  example: jane.smith@example.com
+      responses:
+        '200':
+          $ref: '#/components/responses/UserSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /users/deleteMe:
+    delete:
+      tags: [Me]
+      summary: Deactivate your account
+      description: Soft delete. The account is hidden from all queries and can no longer log in.
+      responses:
+        '204':
+          description: Account deactivated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ───────────────────────────── WATCHLIST ─────────────────────────────
+  /users/me/watchlist:
+    get:
+      tags: [Watchlist]
+      summary: Get your watchlist
+      responses:
+        '200':
+          $ref: '#/components/responses/WatchlistSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Watchlist]
+      summary: Clear your watchlist
+      responses:
+        '200':
+          $ref: '#/components/responses/WatchlistSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/me/watchlist/{movieId}:
+    parameters:
+      - $ref: '#/components/parameters/movieId'
+    post:
+      tags: [Watchlist]
+      summary: Add a movie to your watchlist
+      responses:
+        '200':
+          $ref: '#/components/responses/WatchlistSuccess'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Movie already in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: fail
+                message: Movie already in watchlist
+    delete:
+      tags: [Watchlist]
+      summary: Remove a movie from your watchlist
+      responses:
+        '200':
+          $ref: '#/components/responses/WatchlistSuccess'
+        '400':
+          $ref: '#/components/responses/InvalidId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Movie not in watchlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                status: fail
+                message: Movie not in watchlist
+
+  # ───────────────────────────── USERS (ADMIN) ─────────────────────────────
+  /users:
+    get:
+      tags: [Users (admin)]
+      summary: List users
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/fields'
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, admin]
+      responses:
+        '200':
+          description: A page of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          users:
+                            type: array
+                            items:
+                              $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [Users (admin)]
+      summary: Get a user
+      responses:
+        '200':
+          $ref: '#/components/responses/UserSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Users (admin)]
+      summary: Update a user
+      description: Admins can change `name`, `email`, `role` and `photo`, but never a password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [user, admin]
+                photo:
+                  type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/UserSuccess'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Users (admin)]
+      summary: Delete a user
+      description: Permanently deletes the user and their reviews, then recalculates the affected movie ratings.
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ───────────────────────────── SYSTEM ─────────────────────────────
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: For load balancers and uptime monitors. Returns 503 when the database is unreachable.
+      security: []
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              example:
+                status: success
+                uptime: 3600
+                database: connected
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              example:
+                status: error
+                uptime: 3600
+                database: disconnected
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+    movieId:
+      name: movieId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ObjectId'
+      example: 64b000000000000000000b03
+    page:
+      name: page
+      in: query
+      description: Page number (starts at 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    limit:
+      name: limit
+      in: query
+      description: Results per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    sort:
+      name: sort
+      in: query
+      description: Comma-separated fields; prefix with `-` for descending
+      schema:
+        type: string
+      example: -ratingsAverage,releaseYear
+    fields:
+      name: fields
+      in: query
+      description: Comma-separated fields to return
+      schema:
+        type: string
+      example: title,releaseYear,ratingsAverage
+
+  schemas:
+    ObjectId:
+      type: string
+      pattern: '^[a-f\d]{24}$'
+      example: 64b000000000000000000b01
+
+    Genre:
+      type: string
+      enum: [Action, Adventure, Animation, Biography, Comedy, Crime, Documentary, Drama, Family, Fantasy, History, Horror, Mystery, Romance, Sci-Fi, Thriller, Psychological]
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Documents matching the query across all pages
+          example: 15
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        pages:
+          type: integer
+          example: 2
+
+    ListEnvelope:
+      type: object
+      properties:
+        status:
+          type: string
+          example: success
+        results:
+          type: integer
+          description: Documents in this page
+          example: 10
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    Error:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [fail, error]
+        message:
+          type: string
+        errors:
+          type: object
+          description: Field-level messages (validation errors only)
+          additionalProperties:
+            type: string
+
+    # ── Auth ──
+    SignupInput:
+      type: object
+      required: [name, email, password, passwordConfirm]
+      properties:
+        name:
+          type: string
+          maxLength: 50
+          example: Jane Doe
+        email:
+          type: string
+          format: email
+          example: jane.doe@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: password123
+        passwordConfirm:
+          type: string
+          format: password
+          example: password123
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        password:
+          type: string
+          format: password
+          example: password123
+
+    UpdatePasswordInput:
+      type: object
+      required: [passwordCurrent, password, passwordConfirm]
+      properties:
+        passwordCurrent:
+          type: string
+          format: password
+          example: password123
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: newPassword456
+        passwordConfirm:
+          type: string
+          format: password
+          example: newPassword456
+
+    # ── User ──
+    User:
+      type: object
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        name:
+          type: string
+          example: Jane Cooper
+        email:
+          type: string
+          format: email
+          example: jane@example.com
+        photo:
+          type: string
+          example: default.jpg
+        role:
+          type: string
+          enum: [user, admin]
+        watchlist:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectId'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # ── Movie ──
+    MovieUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 150
+          example: Inception
+        description:
+          type: string
+          maxLength: 2000
+          example: A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea.
+        genre:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/Genre'
+          example: [Action, Adventure, Sci-Fi]
+        releaseYear:
+          type: integer
+          minimum: 1888
+          example: 2010
+        duration:
+          type: integer
+          minimum: 1
+          description: Minutes
+          example: 148
+        rating:
+          type: number
+          minimum: 0
+          maximum: 10
+          description: External critics score (e.g. IMDb)
+          example: 8.8
+        director:
+          type: string
+          example: Christopher Nolan
+        cast:
+          type: array
+          description: Actor ids — every id must exist
+          items:
+            $ref: '#/components/schemas/ObjectId'
+          example: [64a000000000000000000a01]
+        posterUrl:
+          type: string
+          example: https://image.tmdb.org/t/p/w500/poster.jpg
+        tmdbId:
+          type: integer
+          description: The Movie Database id (unique)
+          example: 27205
+
+    MovieInput:
+      allOf:
+        - $ref: '#/components/schemas/MovieUpdate'
+        - type: object
+          required: [title, description, genre, releaseYear, duration, director]
+
+    Movie:
+      allOf:
+        - type: object
+          properties:
+            _id:
+              $ref: '#/components/schemas/ObjectId'
+            slug:
+              type: string
+              example: inception
+        - $ref: '#/components/schemas/MovieUpdate'
+        - type: object
+          properties:
+            cast:
+              type: array
+              items:
+                $ref: '#/components/schemas/ActorSummary'
+            ratingsAverage:
+              type: number
+              description: Average user rating (calculated from reviews)
+              example: 8.5
+            ratingsQuantity:
+              type: integer
+              description: Number of user reviews
+              example: 2
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    GenreStats:
+      type: object
+      properties:
+        genre:
+          $ref: '#/components/schemas/Genre'
+        numMovies:
+          type: integer
+          example: 7
+        numRatings:
+          type: integer
+          example: 12
+        avgUserRating:
+          type: number
+          example: 9.2
+        avgCriticRating:
+          type: number
+          example: 8.8
+        avgDuration:
+          type: number
+          example: 140
+        minDuration:
+          type: integer
+          example: 106
+        maxDuration:
+          type: integer
+          example: 169
+        oldestRelease:
+          type: integer
+          example: 1994
+        newestRelease:
+          type: integer
+          example: 2019
+        movies:
+          type: array
+          items:
+            type: string
+          example: [The Shawshank Redemption, Parasite]
+
+    # ── Actor ──
+    ActorSummary:
+      type: object
+      properties:
+        _id:
+          $ref: '#/components/schemas/ObjectId'
+        firstName:
+          type: string
+          example: Leonardo
+        lastName:
+          type: string
+          example: DiCaprio
+        fullName:
+          type: string
+          example: Leonardo DiCaprio
+        photo:
+          type: string
+          example: default-actor.jpg
+
+    ActorUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+          maxLength: 50
+          example: Leonardo
+        lastName:
+          type: string
+          maxLength: 50
+          example: DiCaprio
+        birthDate:
+          type: string
+          format: date
+          example: '1974-11-11'
+        birthPlace:
+          type: string
+          example: Los Angeles, California, USA
+        biography:
+          type: string
+          maxLength: 2000
+          example: Academy Award-winning actor and producer.
+        nationality:
+          type: string
+          example: American
+        photo:
+          type: string
+          example: default-actor.jpg
+        url:
+          type: string
+          format: uri
+          example: https://www.imdb.com/name/nm0000138/
+
+    ActorInput:
+      allOf:
+        - $ref: '#/components/schemas/ActorUpdate'
+        - type: object
+          required: [firstName, lastName]
+
+    Actor:
+      allOf:
+        - type: object
+          properties:
+            _id:
+              $ref: '#/components/schemas/ObjectId'
+            slug:
+              type: string
+              example: leonardo-dicaprio
+            fullName:
+              type: string
+              example: Leonardo DiCaprio
+            age:
+              type: integer
+              example: 51
+            movies:
+              type: array
+              description: Filmography (single actor endpoint only)
+              items:
+                type: object
+                properties:
+                  _id:
+                    $ref: '#/components/schemas/ObjectId'
+                  title:
+                    type: string
+                  releaseYear:
+                    type: integer
+        - $ref: '#/components/schemas/ActorUpdate'
+
+    # ── Review ──
+    ReviewUpdate:
+      type: object
+      properties:
+        review:
+          type: string
+          minLength: 10
+          maxLength: 500
+          example: Mind-bending concept with incredible practical effects.
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 9
+
+    ReviewInput:
+      allOf:
+        - $ref: '#/components/schemas/ReviewUpdate'
+        - type: object
+          required: [review, rating]
+
+    Review:
+      allOf:
+        - type: object
+          properties:
+            _id:
+              $ref: '#/components/schemas/ObjectId'
+            movie:
+              $ref: '#/components/schemas/ObjectId'
+            user:
+              type: object
+              nullable: true
+              description: Author (null if the account was deactivated)
+              properties:
+                _id:
+                  $ref: '#/components/schemas/ObjectId'
+                name:
+                  type: string
+                  example: Jane Cooper
+                photo:
+                  type: string
+            createdAt:
+              type: string
+              format: date-time
+        - $ref: '#/components/schemas/ReviewUpdate'
+
+  responses:
+    AuthSuccess:
+      description: Authenticated
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              token:
+                type: string
+                example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+              data:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+
+    UserSuccess:
+      description: A user
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              data:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+
+    MovieSuccess:
+      description: A movie
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              data:
+                type: object
+                properties:
+                  movie:
+                    $ref: '#/components/schemas/Movie'
+
+    ActorSuccess:
+      description: An actor
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              data:
+                type: object
+                properties:
+                  actor:
+                    $ref: '#/components/schemas/Actor'
+
+    ReviewSuccess:
+      description: A review
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              data:
+                type: object
+                properties:
+                  review:
+                    $ref: '#/components/schemas/Review'
+
+    ReviewList:
+      description: A page of reviews
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ListEnvelope'
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      reviews:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Review'
+
+    WatchlistSuccess:
+      description: The current watchlist
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: success
+              message:
+                type: string
+                example: Movie added to watchlist
+              results:
+                type: integer
+                example: 1
+              data:
+                type: object
+                properties:
+                  watchlist:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Movie'
+
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: Please provide email and password
+
+    InvalidId:
+      description: Malformed id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: 'Invalid _id: "abc"'
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: Invalid input data. A movie must have a director
+            errors:
+              director: A movie must have a director
+
+    Unauthorized:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: You are not logged in. Please log in to get access
+
+    Forbidden:
+      description: Authenticated but not allowed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: You do not have permission to perform this action
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: No movie found with that ID
+
+    Conflict:
+      description: Conflicts with existing data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: You have already reviewed this movie
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            status: fail
+            message: Too many login attempts, please try again in 15 minutes
+
+security:
+  - bearerAuth: []

@@ -5,19 +5,22 @@ const reviewRouter = require('./reviewRoutes')
 
 const router = express.Router()
 
-// Nested route: Redirect to review router
+// Nested route: /movies/:movieId/reviews is handled by the review router
 router.use('/:movieId/reviews', reviewRouter)
 
-// Public router
-router.route('/').get(movieController.getAllMovies)
-router.route('/:id').get(movieController.getMovie)
+// PUBLIC (static paths must come before /:id)
+router.get('/top-5-movies', movieController.aliasTopMovies, movieController.getAllMovies)
+router.get('/movie-stats', movieController.getMovieStats)
 
-// Protect routes
-router.use(authController.protect)
-router.use(authController.restrictTo('admin'))
+router
+  .route('/')
+  .get(movieController.getAllMovies)
+  .post(authController.protect, authController.restrictTo('admin'), movieController.createMovie)
 
-router.post('/', movieController.createMovie)
-router.patch('/:id', movieController.updateMovie)
-router.delete('/:id', movieController.deleteMovie)
+router
+  .route('/:id')
+  .get(movieController.getMovie)
+  .patch(authController.protect, authController.restrictTo('admin'), movieController.updateMovie)
+  .delete(authController.protect, authController.restrictTo('admin'), movieController.deleteMovie)
 
 module.exports = router

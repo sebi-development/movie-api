@@ -4,18 +4,15 @@ const authController = require('../controllers/authController')
 
 const router = express.Router()
 
-// PUBLIC
+router
+  .route('/')
+  .get(actorController.getAllActors)
+  .post(authController.protect, authController.restrictTo('admin'), actorController.createActor)
 
-router.get('/', actorController.getAllActors)
-router.get('/:id', actorController.getActor)
-
-// PROTECTED
-
-router.use(authController.protect)
-router.use(authController.restrictTo('admin'))
-
-router.post('/', actorController.createActor)
-router.patch('/:id', actorController.updateActor)
-router.delete('/:id', actorController.deleteActor)
+router
+  .route('/:id')
+  .get(actorController.getActor)
+  .patch(authController.protect, authController.restrictTo('admin'), actorController.updateActor)
+  .delete(authController.protect, authController.restrictTo('admin'), actorController.deleteActor)
 
 module.exports = router

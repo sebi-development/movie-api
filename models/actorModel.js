@@ -2,23 +2,40 @@ const mongoose = require('mongoose')
 const slugify = require('slugify')
 const validator = require('validator')
 
-const ActorSchema = mongoose.Schema({
+const ActorSchema = new mongoose.Schema({
   firstName: {
     type: String,
-    required: [true, 'Actor must have a name'],
-    trim: true
+    required: [true, 'Actor must have a first name'],
+    trim: true,
+    maxlength: [50, 'First name must have at most 50 characters']
   },
 
   lastName: {
     type: String,
     required: [true, 'Actor must have a last name'],
-    trim: true
+    trim: true,
+    maxlength: [50, 'Last name must have at most 50 characters']
   },
 
   slug: String,
 
   birthDate: {
     type: Date,
+    validate: {
+      validator: date => date <= Date.now(),
+      message: 'Birth date cannot be in the future'
+    }
+  },
+
+  birthPlace: {
+    type: String,
+    trim: true
+  },
+
+  biography: {
+    type: String,
+    trim: true,
+    maxlength: [2000, 'Biography must have at most 2000 characters']
   },
 
   photo: {
@@ -33,28 +50,27 @@ const ActorSchema = mongoose.Schema({
 
   url: {
     type: String,
-    validate: [validator.isURL, 'Please provide valid url format']
+    validate: [value => validator.isURL(value), 'Please provide valid url format']
   }
-
 }, {
-  toJSON: { virtuals: true },
+  timestamps: true,
+  id: false,
+  toJSON: { virtuals: true, versionKey: false },
   toObject: { virtuals: true }
 })
 
 // INDEX
-ActorSchema.index({ firstName: 1, lastName: 1 })
+ActorSchema.index({ lastName: 1, firstName: 1 })
 
-// MIDDLEWARE
-ActorSchema.virtual('fullName').get(function (next) {
+// VIRTUALS
+ActorSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`
 })
 
-ActorSchema.virtual('age').get(function (next) {
-  if (!this.birthDate) return null
-  const ageDiff = Date.now() - this.birthDate.getTime()
-  const ageDate = new Date(ageDiff)
+ActorSchema.virtual('age').get(function () {
+  if (!this.birthDate) return undefined
+  const ageDate = new Date(Date.now() - this.birthDate.getTime())
   return Math.abs(ageDate.getUTCFullYear() - 1970)
-
 })
 
 // Virtual populate: Get all movies this actor is in
@@ -64,9 +80,11 @@ ActorSchema.virtual('movies', {
   localField: '_id'
 })
 
-ActorSchema.pre('save', function (next) {
-  this.slug = slugify(`${this.firstName} ${this.lastName}`, { lower: true })
-  next()
+// MIDDLEWARE
+ActorSchema.pre('save', function () {
+  if (this.isModified('firstName') || this.isModified('lastName')) {
+    this.slug = slugify(`${this.firstName} ${this.lastName}`, { lower: true, strict: true })
+  }
 })
 
 const Actor = mongoose.model('Actor', ActorSchema)

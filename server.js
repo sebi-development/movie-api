@@ -1,36 +1,56 @@
 const mongoose = require('mongoose')
-const dotenv = require('dotenv')
 
-// Handle uncaught exceptions
+// Handle uncaught exceptions (registered first so it catches everything below)
 process.on('uncaughtException', err => {
   console.error('💥 UNCAUGHT EXCEPTION! Shutting down...')
-  console.error(err.name, err.message)
+  console.error(err)
   process.exit(1)
 })
 
-// Load environment variables
-dotenv.config({ path: './config/config.env' })
+const { validateEnv } = require('./config/env')
+validateEnv()
 
 const app = require('./app')
 
-// Database connection
-const DB = process.env.DATABASE_URI
-
-mongoose.connect(DB)
-  .then(() => console.log('✅ DB connection successful!'))
-  .catch((err) => console.log('❌ DB CONNECTION ERROR:', err));
-
-// Start server
 const port = process.env.PORT || 3000
-const server = app.listen(port, () => {
-  console.log(`Server running on port ${port}`)
-})
+let server
+
+const start = async () => {
+  try {
+    await mongoose.connect(process.env.DATABASE_URI)
+    console.log('✅ DB connection successful!')
+  } catch (err) {
+    console.error('❌ DB CONNECTION ERROR:', err.message)
+    process.exit(1)
+  }
+
+  server = app.listen(port, () => {
+    console.log(`🚀 Server running on port ${port} (${process.env.NODE_ENV})`)
+    console.log(`📚 API docs available at http://localhost:${port}/api-docs`)
+  })
+}
+
+// Close the HTTP server and DB connection before exiting
+const shutdown = (signal, exitCode = 0) => {
+  console.log(`${signal} received. Shutting down gracefully...`)
+
+  const closeDb = () => mongoose.connection.close().finally(() => process.exit(exitCode))
+
+  if (server) server.close(closeDb)
+  else closeDb()
+
+  // Force exit if connections don't close in time
+  setTimeout(() => process.exit(exitCode || 1), 10000).unref()
+}
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', err => {
   console.error('💥 UNHANDLED REJECTION! Shutting down...')
-  console.error(err.name, err.message)
-  server.close(() => {
-    process.exit(1)
-  })
+  console.error(err)
+  shutdown('unhandledRejection', 1)
 })
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
+
+start()

@@ -1,102 +1,90 @@
 const Review = require('../models/reviewModel')
+const Movie = require('../models/movieModel')
 const AppError = require('../utils/AppError')
-const APIFeatures = require('../utils/apiFeatures')
 const catchAsync = require('../utils/catchAsync')
+const factory = require('./handlerFactory')
 
 // HELPERS
-const findReviewAndValidate = async function (reviewId, req, next) {
-  const review = await Review.findById(reviewId)
+
+// Works whether review.user is populated, null (deactivated author) or a raw ObjectId
+const isAuthor = (review, user) => {
+  const authorId = review.user?._id ?? review.user
+  return authorId != null && String(authorId) === String(user._id)
+}
+
+const findOwnReview = async (req, next) => {
+  const review = await Review.findById(req.params.id)
 
   if (!review) {
-    return next(new AppError('No review found with that ID', 404))
+    next(new AppError('No review found with that ID', 404))
+    return null
   }
 
-  if (review.user.id !== req.user.id && req.user.role !== 'admin') {
-    return next(new AppError('You can only edit your own reviews', 403))
+  if (!isAuthor(review, req.user) && req.user.role !== 'admin') {
+    next(new AppError('You can only modify your own reviews', 403))
+    return null
   }
 
   return review
 }
 
-exports.getAllReviews = catchAsync(async (req, res, next) => {
-  let filter = {}
+// HANDLERS
 
-  // Only show reviews for that specific movie
-  if (req.params.movieId) filter = { movie: req.params.movieId }
-
-  // BUILD QUERY
-  const features = new APIFeatures(Review.find(filter), req.query).filter().sort().limitFields().paginate()
-  // EXECUTE QUERY
-  const reviews = await features.query
-
-  res.status(200).json({
-    status: 'success',
-    results: reviews.length,
-    data: {
-      data: reviews
-    }
-  })
+// Supports both /reviews and the nested /movies/:movieId/reviews
+exports.getAllReviews = factory.getAll(Review, {
+  key: 'reviews',
+  baseFilter: req => (req.params.movieId ? { movie: req.params.movieId } : {})
 })
 
-exports.getReview = catchAsync(async (req, res, next) => {
-  const review = await Review.findById(req.params.id)
-
-  if (!review) {
-    return next(new AppError('Review not found', 404))
-  }
-
-  res.status(200).json({
-    status: 'success',
-    data: {
-      review
-    }
-  })
-})
+exports.getReview = factory.getOne(Review, { key: 'review' })
 
 exports.createReview = catchAsync(async (req, res, next) => {
-  if (!req.body.movie) req.body.movie = req.params.movieId
-  if (!req.body.user) req.body.user = req.user.id // from protect middleware
+  const movieId = req.params.movieId || req.body.movie
+  if (!movieId) return next(new AppError('Please specify the movie you are reviewing', 400))
 
+  if (!(await Movie.exists({ _id: movieId }))) {
+    return next(new AppError('No movie found with that ID', 404))
+  }
+
+  if (await Review.exists({ movie: movieId, user: req.user._id })) {
+    return next(new AppError('You have already reviewed this movie', 409))
+  }
+
+  // The author is always the logged-in user — never taken from the request body
   const newReview = await Review.create({
     review: req.body.review,
     rating: req.body.rating,
-    movie: req.body.movie,
-    user: req.body.user
+    movie: movieId,
+    user: req.user._id
   })
 
   res.status(201).json({
     status: 'success',
-    data: {
-      review: newReview
-    }
+    data: { review: newReview }
   })
 })
 
 exports.updateReview = catchAsync(async (req, res, next) => {
-  const review = await findReviewAndValidate(req.params.id, req, next)
-
+  const review = await findOwnReview(req, next)
   if (!review) return
 
-  // Updating allowed fields
-  review.review = req.body.review ?? review.review
-  review.rating = req.body.rating ?? review.rating
+  // Only the text and rating can change
+  if (req.body.review !== undefined) review.review = req.body.review
+  if (req.body.rating !== undefined) review.rating = req.body.rating
 
-  await review.save()
+  await review.save() // triggers rating recalculation
 
   res.status(200).json({
     status: 'success',
-    data: review
+    data: { review }
   })
 })
 
 exports.deleteReview = catchAsync(async (req, res, next) => {
-  const review = await findReviewAndValidate(req.params.id, req, next)
+  const review = await findOwnReview(req, next)
   if (!review) return
 
-  await review.deleteOne()
+  await review.deleteOne() // triggers rating recalculation
 
-  res.status(204).json({
-    status: 'success',
-    data: null
-  })
+  res.status(204).send()
 })

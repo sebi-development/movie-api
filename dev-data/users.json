@@ -1,0 +1,32 @@
+[
+  {
+    "_id": "64c000000000000000000c01",
+    "name": "Admin",
+    "email": "admin@movieapi.dev",
+    "role": "admin",
+    "password": "password123"
+  },
+  {
+    "_id": "64c000000000000000000c02",
+    "name": "Jane Cooper",
+    "email": "jane@example.com",
+    "role": "user",
+    "password": "password123",
+    "watchlist": ["64b000000000000000000b04", "64b000000000000000000b11"]
+  },
+  {
+    "_id": "64c000000000000000000c03",
+    "name": "Mark Rivera",
+    "email": "mark@example.com",
+    "role": "user",
+    "password": "password123",
+    "watchlist": ["64b000000000000000000b12"]
+  },
+  {
+    "_id": "64c000000000000000000c04",
+    "name": "Lena Novak",
+    "email": "lena@example.com",
+    "role": "user",
+    "password": "password123"
+  }
+]
